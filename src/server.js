@@ -27,6 +27,10 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 // Semicolon-separated media-type parameters: Node's HTTP header validation rejects a
 // comma here (it throws "invalid parameter format"), and RFC 2045 parameters are `;` split.
 const PROMETHEUS_CONTENT_TYPE = 'text/plain; version=0.0.4; charset=utf-8';
+// Snapshot-keyed render caches: the collector returns the same this.latest (stable
+// .timestamp) within a refresh window, so identical timestamp => identical output.
+const promCache = { key: null, text: null };
+const apiCache = { key: null, aggregate: null };
 
 const STATIC_CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -267,7 +271,15 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/metrics') {
     try {
       const metrics = await collector.getMetrics();
-      sendText(res, 200, renderPrometheus(metrics, remoteRegistry.list(), LOCAL_INSTANCE), PROMETHEUS_CONTENT_TYPE);
+      const cacheKey = metrics ? metrics.timestamp : 'cold';
+      if (promCache.key === cacheKey && promCache.text !== null) {
+        sendText(res, 200, promCache.text, PROMETHEUS_CONTENT_TYPE);
+        return;
+      }
+      const text = renderPrometheus(metrics, remoteRegistry.list(), LOCAL_INSTANCE);
+      promCache.key = cacheKey;
+      promCache.text = text;
+      sendText(res, 200, text, PROMETHEUS_CONTENT_TYPE);
     } catch (error) {
       sendText(res, 500, `# error collecting metrics: ${error.message}\n`, 'text/plain; charset=utf-8');
     }
@@ -277,18 +289,26 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/api/metrics') {
     try {
       const metrics = await collector.getMetrics();
-      const aggregate = {
-        timestamp: new Date().toISOString(),
-        local: metrics,
-        hosts: remoteRegistry.list().map(({ instance, url, status, lastSuccessAt, error, data }) => ({
-          instance,
-          url,
-          status,
-          lastSuccessAt: lastSuccessAt === undefined ? null : lastSuccessAt,
-          error: error === undefined ? null : error,
-          data: data === undefined ? null : data,
-        })),
-      };
+      const cacheKey = metrics ? metrics.timestamp : 'cold';
+      let aggregate;
+      if (apiCache.key === cacheKey && apiCache.aggregate) {
+        aggregate = { ...apiCache.aggregate, timestamp: new Date().toISOString() };
+      } else {
+        aggregate = {
+          timestamp: new Date().toISOString(),
+          local: metrics,
+          hosts: remoteRegistry.list().map(({ instance, url, status, lastSuccessAt, error, data }) => ({
+            instance,
+            url,
+            status,
+            lastSuccessAt: lastSuccessAt === undefined ? null : lastSuccessAt,
+            error: error === undefined ? null : error,
+            data: data === undefined ? null : data,
+          })),
+        };
+        apiCache.key = cacheKey;
+        apiCache.aggregate = aggregate;
+      }
       sendText(res, 200, JSON.stringify(aggregate), 'application/json; charset=utf-8');
     } catch (error) {
       sendText(res, 500, JSON.stringify({ error: 'failed to collect metrics', detail: error.message }), 'application/json; charset=utf-8');

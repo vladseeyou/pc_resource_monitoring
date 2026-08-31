@@ -35,6 +35,21 @@ const hostEls = new Map();
 
 let fleet = []; // [{ role, instance, displayName, color, visible, status, data, lastSuccessAt, error }]
 
+// instance -> { chip, nameEl, stateEl, cls, name, state, color } (reconciled fleet chips)
+const fleetChips = new Map();
+// instance -> "cpu|mem" signature of the series currently painted on the per-host chart
+const hostChartSig = new Map();
+// signature of the visible-host series + legend inputs behind the last comparison-chart paint
+let cmpSig = null;
+
+function cmpSignature(vis) {
+  return vis.map((h) => {
+    const hh = getHostHist(h.instance);
+    return h.instance + '\u0000' + h.displayName + '\u0000' + h.color +
+      '\u0001' + hh.cpu.join(',') + '\u0002' + hh.mem.join(',') + '\u0003' + hh.tCpu.join(',');
+  }).join('\u0004');
+}
+
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -176,6 +191,7 @@ function reconcilePanels() {
       if (r.chart && r.chart.destroy) r.chart.destroy();
       r.panel.remove();
       hostEls.delete(inst);
+      hostChartSig.delete(inst);
     }
   }
   fleet.forEach((h) => { if (!hostEls.has(h.instance)) createPanel(h); });
@@ -242,6 +258,7 @@ function updatePanel(h) {
 }
 
 function drawPerHost(r, h, hh) {
+  const sig = hh.cpu.join(',') + '|' + hh.mem.join(',');
   if (window.Chart && !window.__NO_CHART__) {
     if (!r.chart) {
       r.chart = new Chart(r.canvas, {
@@ -255,16 +272,23 @@ function drawPerHost(r, h, hh) {
         },
         options: chartOptions(100, false)
       });
+      r.chart.update('none');
+      hostChartSig.set(h.instance, sig);
+    } else if (hostChartSig.get(h.instance) === sig) {
+      return;
     } else {
       r.chart.data.labels = histLabels;
       r.chart.data.datasets[0].data = hh.cpu;
       r.chart.data.datasets[1].data = hh.mem;
+      r.chart.update('none');
+      hostChartSig.set(h.instance, sig);
     }
-    r.chart.update('none');
   } else {
+    if (hostChartSig.get(h.instance) === sig) return;
     const finite = hh.cpu.concat(hh.mem).filter((v) => Number.isFinite(v));
     r.noData.classList.toggle('show', finite.length < 2);
     spark(r.canvas, [hh.cpu, hh.mem], null, 0, 100, [h.color, MEM_COLOR]);
+    hostChartSig.set(h.instance, sig);
   }
 }
 
@@ -272,16 +296,36 @@ function drawPerHost(r, h, hh) {
 
 function renderFleet() {
   const bar = el('hostBar');
-  bar.textContent = '';
+  const want = new Set(fleet.map((h) => h.instance));
+  for (const inst of [...fleetChips.keys()]) {
+    if (!want.has(inst)) {
+      fleetChips.get(inst).chip.remove();
+      fleetChips.delete(inst);
+    }
+  }
   fleet.forEach((h) => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'chip' + (h.status === 'error' ? ' err' : '') + (h.visible ? '' : ' off');
-    chip.style.setProperty('--hc', h.color);
-    chip.innerHTML = `<span class="chip-dot"></span><span class="chip-name">${esc(h.displayName)}</span>` +
-      (h.status === 'ok' ? '<span class="chip-state">LIVE</span>' : '<span class="chip-state">ERR</span>');
-    chip.addEventListener('click', () => { h.visible = !h.visible; reconcilePanels(); renderFleet(); applyVisibility(); updateComparisonCharts(); });
-    bar.appendChild(chip);
+    const inst = h.instance;
+    let rec = fleetChips.get(inst);
+    if (!rec) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.innerHTML = '<span class="chip-dot"></span><span class="chip-name"></span><span class="chip-state"></span>';
+      chip.style.setProperty('--hc', h.color);
+      chip.addEventListener('click', () => {
+        const cur = fleet.find((x) => x.instance === inst);
+        if (!cur) return;
+        cur.visible = !cur.visible; reconcilePanels(); renderFleet(); applyVisibility(); updateComparisonCharts();
+      });
+      rec = { chip, nameEl: chip.querySelector('.chip-name'), stateEl: chip.querySelector('.chip-state'), cls: null, name: null, state: null, color: h.color };
+      fleetChips.set(inst, rec);
+      bar.appendChild(chip);
+    }
+    const cls = 'chip' + (h.status === 'error' ? ' err' : '') + (h.visible ? '' : ' off');
+    if (rec.cls !== cls) { rec.chip.className = cls; rec.cls = cls; }
+    if (rec.color !== h.color) { rec.chip.style.setProperty('--hc', h.color); rec.color = h.color; }
+    if (rec.name !== h.displayName) { rec.nameEl.textContent = h.displayName; rec.name = h.displayName; }
+    const state = h.status === 'ok' ? 'LIVE' : 'ERR';
+    if (rec.state !== state) { rec.stateEl.textContent = state; rec.state = state; }
   });
   const vis = fleet.filter((h) => h.visible).length;
   fleetCount.textContent = `${vis} / ${fleet.length} HOSTS`;
@@ -333,6 +377,10 @@ function updateComparisonCharts() {
   const vis = visibleOk();
   const anyTemp = vis.some((h) => getHostHist(h.instance).tCpu.some((v) => Number.isFinite(v)));
   el('tempNoData').classList.toggle('show', !anyTemp && histLabels.length >= 4);
+
+  const sig = cmpSignature(vis);
+  if (sig === cmpSig) return;
+  cmpSig = sig;
 
   if (charts.mode === 'chartjs') {
     charts.cpuChart.data.datasets = cmpDatasets('cpu');
@@ -442,7 +490,9 @@ function updateCoreBars(coreBars, perCore) {
   });
 }
 
-window.addEventListener('resize', () => { if (charts && charts.mode === 'fallback') updateComparisonCharts(); });
+window.addEventListener('resize', () => {
+  if (charts && charts.mode === 'fallback') { cmpSig = null; hostChartSig.clear(); updateComparisonCharts(); }
+});
 
 /* ---------------- poll loop ---------------- */
 

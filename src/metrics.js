@@ -10,6 +10,7 @@ const { spawn } = require('child_process');
 
 const DEFAULT_INTERVAL_MS = 1000;
 const DEFAULT_GPU_TIMEOUT_MS = 1500;
+const DEFAULT_GPU_PROBE_INTERVAL_MS = 5000;
 const BYTES_PER_MB = 1024 * 1024;
 
 // os.loadavg() is unimplemented on Windows and always reports [0, 0, 0]. On those
@@ -114,9 +115,14 @@ function parseNvidiaSmi(stdout) {
 }
 
 class MetricsCollector {
-  constructor({ intervalMs = DEFAULT_INTERVAL_MS, gpuTimeoutMs = DEFAULT_GPU_TIMEOUT_MS } = {}) {
+  constructor({
+    intervalMs = DEFAULT_INTERVAL_MS,
+    gpuTimeoutMs = DEFAULT_GPU_TIMEOUT_MS,
+    gpuProbeIntervalMs = DEFAULT_GPU_PROBE_INTERVAL_MS,
+  } = {}) {
     this.intervalMs = intervalMs;
     this.gpuTimeoutMs = gpuTimeoutMs;
+    this.gpuProbeIntervalMs = gpuProbeIntervalMs;
 
     this.latest = null;
     this.timer = null;
@@ -126,6 +132,7 @@ class MetricsCollector {
     this._gpuAvailable = false;
     this._gpuProbePermanentlyDisabled = false;
     this._gpuProbeInFlight = null;
+    this._lastProbeAt = 0;
   }
 
   /** Begins polling. Idempotent. */
@@ -150,7 +157,7 @@ class MetricsCollector {
   async getMetrics() {
     const ageMs = this.latest ? Date.now() - Date.parse(this.latest.timestamp) : Infinity;
     if (ageMs > this.intervalMs * 2) await this.collect();
-    return this._snapshotCopy(this.latest);
+    return this.latest;
   }
 
   /** Takes one reading of every source and refreshes the cache. */
@@ -179,18 +186,7 @@ class MetricsCollector {
     };
 
     this.latest = snapshot;
-    return this._snapshotCopy(snapshot);
-  }
-
-  _snapshotCopy(snapshot) {
-    if (!snapshot) return null;
-    return {
-      ...snapshot,
-      cpu: { ...snapshot.cpu, loadAvg: [...snapshot.cpu.loadAvg] },
-      memory: { ...snapshot.memory },
-      gpu: snapshot.gpu.map((gpu) => ({ ...gpu })),
-      temperatures: { ...snapshot.temperatures },
-    };
+    return snapshot;
   }
 
   _takeCpuSample() {
@@ -248,9 +244,17 @@ class MetricsCollector {
 
   /** Best-effort NVIDIA probe; never throws and never blocks past gpuTimeoutMs. */
   _probeGpus() {
-    if (this._gpuProbeInFlight) return this._gpuProbeInFlight;
     if (this._gpuProbePermanentlyDisabled) return Promise.resolve(this._gpus);
 
+    // Throttled spawn: between probes report the last-known GPU values instead of
+    // paying for a child process every polling cycle.
+    const now = Date.now();
+    const withinThrottleWindow =
+      this._lastProbeAt > 0 && now - this._lastProbeAt < this.gpuProbeIntervalMs;
+    if (withinThrottleWindow && !this._gpuProbeInFlight) return Promise.resolve(this._gpus);
+    if (this._gpuProbeInFlight) return this._gpuProbeInFlight;
+
+    this._lastProbeAt = now;
     this._gpuProbeInFlight = runCommand('nvidia-smi', NVIDIA_SMI_ARGS, this.gpuTimeoutMs)
       .then((stdout) => {
         this._gpus = parseNvidiaSmi(stdout);
