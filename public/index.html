@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SYSTEM METRICS</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%2322d3ee'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js" referrerpolicy="no-referrer" onerror="window.__NO_CHART__=true"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <h1 class="title">SYSTEM&nbsp;METRICS</h1>
+    <div class="sub">
+      <span id="hostname" class="host">&mdash;</span>
+      <span id="platform" class="badge">&mdash;</span>
+    </div>
+  </div>
+  <div class="statusbox">
+    <span class="pulse-wrap"><span id="dot" class="dot ok"></span></span>
+    <span id="statusText" class="status-text">CONNECTING</span>
+    <span class="clock-label">LAST UPDATE</span>
+    <span id="lastUpdate" class="clock mono">&mdash;</span>
+  </div>
+</header>
+
+<main class="layout">
+
+  <section class="hostbar-card card" aria-label="host visibility">
+    <div class="hostbar-head">
+      <h3>FLEET <span class="axis-note">CLICK TO FOCUS</span></h3>
+      <span id="fleetCount" class="load mono">&nbsp;</span>
+    </div>
+    <div id="hostBar" class="hostbar"></div>
+  </section>
+
+  <section id="hostPanels" class="host-panels" aria-label="host panels"></section>
+
+  <template id="miniGaugeTpl">
+    <div class="gauge mini">
+      <div class="dial-wrap">
+        <svg viewBox="0 0 120 120" class="dial" aria-hidden="true">
+          <defs>
+            <linearGradient class="gradx" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" class="gs1"/><stop offset="100%" class="gs2"/>
+            </linearGradient>
+          </defs>
+          <circle class="track" cx="60" cy="60" r="52"></circle>
+          <circle class="progress" cx="60" cy="60" r="52" pathLength="100"></circle>
+        </svg>
+        <div class="gauge-center">
+          <span class="value mono">&ndash;</span><span class="unit">%</span>
+        </div>
+      </div>
+      <div class="gauge-foot">
+        <span class="label mini-label">&nbsp;</span>
+        <span class="sub mono mini-sub">&nbsp;</span>
+      </div>
+    </div>
+  </template>
+
+  <template id="hostPanelTpl">
+    <article class="card host-panel">
+      <header class="panel-head">
+        <span class="dot panel-dot ok"></span>
+        <h2 class="panel-title mono">&mdash;</h2>
+        <span class="panel-role">REMOTE</span>
+        <span class="panel-load mono">&nbsp;</span>
+      </header>
+      <div class="panel-nodata mono"></div>
+      <div class="panel-body">
+        <div class="panel-gauges"></div>
+        <div class="temp-chips">
+          <div class="temp-chip t-cpu st-na"><span class="chip-label">CPU &deg;C</span><span class="value mono">&ndash;</span></div>
+          <div class="temp-chip t-gpu st-na"><span class="chip-label">GPU &deg;C</span><span class="value mono">&ndash;</span></div>
+        </div>
+        <div class="panel-chart chart-wrap-sm">
+          <canvas></canvas>
+          <div class="no-data mini-nd">NO SERIES</div>
+        </div>
+        <div class="cores-head"><h3>PER-CORE UTILIZATION <span class="axis-note">%</span></h3></div>
+        <div class="core-bars compact"></div>
+      </div>
+    </article>
+  </template>
+
+  <section class="charts" aria-label="comparison charts">
+    <article class="card chart-card accent-cpu">
+      <h3>CPU USAGE &middot; ALL HOSTS <span class="axis-note">%</span></h3>
+      <div class="chart-wrap"><canvas id="cpuChart"></canvas></div>
+      <div class="legend" id="cpuLegend"></div>
+    </article>
+    <article class="card chart-card accent-mem">
+      <h3>MEMORY USED &middot; ALL HOSTS <span class="axis-note">%</span></h3>
+      <div class="chart-wrap"><canvas id="memChart"></canvas></div>
+      <div class="legend" id="memLegend"></div>
+    </article>
+    <article class="card chart-card accent-temp" id="tempChartCard">
+      <h3>TEMPERATURE &middot; ALL HOSTS <span class="axis-note">&deg;C</span></h3>
+      <div class="chart-wrap"><canvas id="tempChart"></canvas><div class="no-data" id="tempNoData">NO SENSOR DATA</div></div>
+      <div class="legend" id="tempLegend"></div>
+    </article>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <span>POLL 1500 ms &middot; JSON <code>/api/metrics</code> MULTI-HOST &middot; PROMETHEUS <code>/metrics</code></span>
+  <span id="chartMode" class="mono"></span>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

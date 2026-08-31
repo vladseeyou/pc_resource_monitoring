@@ -1,0 +1,18 @@
+services:
+  dashboard:
+    build: .
+    container_name: prometheus-system-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+    restart: unless-stopped
+    # For NVIDIA GPUs, expose the GPU to the container by uncommenting:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]

@@ -1,0 +1,21 @@
+{
+  "name": "prometheus-system-dashboard",
+  "version": "1.0.0",
+  "description": "Prometheus-style dashboard for CPU, RAM, GPU load and temperatures",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": [
+    "prometheus",
+    "dashboard",
+    "metrics",
+    "cpu",
+    "ram",
+    "gpu",
+    "temperature"
+  ],
+  "license": "MIT"
+}
