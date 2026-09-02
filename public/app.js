@@ -46,7 +46,7 @@ function cmpSignature(vis) {
   return vis.map((h) => {
     const hh = getHostHist(h.instance);
     return h.instance + '\u0000' + h.displayName + '\u0000' + h.color +
-      '\u0001' + hh.cpu.join(',') + '\u0002' + hh.mem.join(',') + '\u0003' + hh.tCpu.join(',');
+      '\u0001' + hh.cpu.join(',') + '\u0002' + hh.mem.join(',') + '\u0003' + hh.tCpu.join(',') + '\u0005' + hh.tGpu.join(',');
   }).join('\u0004');
 }
 
@@ -108,7 +108,7 @@ function clockStr(iso) {
 const trim = (a) => { if (a.length > WINDOW) a.splice(0, a.length - WINDOW); };
 
 function getHostHist(instance) {
-  if (!hostHist.has(instance)) hostHist.set(instance, { cpu: [], mem: [], tCpu: [], labels: [] });
+  if (!hostHist.has(instance)) hostHist.set(instance, { cpu: [], mem: [], tCpu: [], tGpu: [], labels: [] });
   return hostHist.get(instance);
 }
 
@@ -265,6 +265,8 @@ function updatePanel(h) {
   hh.mem.push(Number.isFinite(memPct) ? memPct : null); trim(hh.mem);
   const tc = (temps.availability && Number.isFinite(Number(temps.cpuCelsius))) ? Number(temps.cpuCelsius) : null;
   hh.tCpu.push(tc === null ? null : tc); trim(hh.tCpu);
+  const tg = (temps.gpuAvailability && Number.isFinite(Number(temps.gpuCelsius))) ? Number(temps.gpuCelsius) : null;
+  hh.tGpu.push(tg === null ? null : tg); trim(hh.tGpu);
   hh.labels.push(clockStr(d.timestamp)); trim(hh.labels);
 
   drawPerHost(r, h, hh);
@@ -361,9 +363,8 @@ function cmpDatasets(kind) {
     let series, label;
     if (kind === 'cpu') { series = hist.cpu; label = h.displayName; }
     else if (kind === 'mem') { series = hist.mem; label = h.displayName + ' MEM'; }
-    else { series = hist.tCpu; label = h.displayName + ' \u00b0C'; }
-    const color = kind === 'mem' ? MEM_COLOR : h.color;
-    return Object.assign(lineDataset(label, color), { data: series });
+    else { series = hist.tGpu; label = h.displayName + ' \u00b0C'; }
+    return Object.assign(lineDataset(label, h.color), { data: series });
   });
 }
 
@@ -371,7 +372,7 @@ function setLegends() {
   const vis = visibleOk();
   const html = vis.map((h) => `<span><i style="--lc:${h.color}"></i>${esc(h.displayName)}</span>`).join('');
   el('cpuLegend').innerHTML = html;
-  el('memLegend').innerHTML = vis.map((h) => `<span><i style="--lc:${MEM_COLOR}"></i>${esc(h.displayName)}</span>`).join('');
+  el('memLegend').innerHTML = vis.map((h) => `<span><i style="--lc:${h.color}"></i>${esc(h.displayName)}</span>`).join('');
   el('tempLegend').innerHTML = vis.map((h) => `<span><i style="--lc:${h.color}"></i>${esc(h.displayName)} \u00b0C</span>`).join('');
 }
 
@@ -393,7 +394,7 @@ function updateComparisonCharts() {
   if (!charts) initCharts();
   const vis = visibleOk();
   const labels = (vis[0] && getHostHist(vis[0].instance).labels) || [];
-  const anyTemp = vis.some((h) => getHostHist(h.instance).tCpu.some((v) => Number.isFinite(v)));
+  const anyTemp = vis.some((h) => getHostHist(h.instance).tGpu.some((v) => Number.isFinite(v)));
   el('tempNoData').classList.toggle('show', !anyTemp && labels.length >= 4);
 
   const sig = cmpSignature(vis);
@@ -414,7 +415,7 @@ function updateComparisonCharts() {
     const cpuSeries = vis.map((h) => getHostHist(h.instance).cpu);
     spark(el('cpuChart'), cpuSeries, null, 0, 100, vis.map((h) => CPU_COLOR));
     spark(el('memChart'), vis.map((h) => getHostHist(h.instance).mem), null, 0, 100, vis.map(() => MEM_COLOR));
-    const tSeries = vis.map((h) => getHostHist(h.instance).tCpu);
+    const tSeries = vis.map((h) => getHostHist(h.instance).tGpu);
     const all = tSeries.flat().filter((v) => Number.isFinite(v));
     const top = all.length ? Math.max(60, Math.ceil(Math.max(...all) * 1.2 / 10) * 10) : 100;
     spark(el('tempChart'), tSeries, null, 0, top, vis.map((h) => h.color));
