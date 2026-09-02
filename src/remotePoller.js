@@ -91,13 +91,16 @@ function fetchMetricsJson(baseUrl, timeoutMs) {
  * Prometheus renderer see a consistent shape regardless of the remote's version.
  */
 function extractRemoteMetrics(payload) {
-  let node = payload && typeof payload === 'object' ? payload.local : null;
+  const outer = payload && typeof payload === 'object' ? payload.local : null;
+  let node = outer;
   while (node && typeof node === 'object' && node.local && !node.memory) {
     node = node.local;
   }
   if (!node || typeof node !== 'object') return null;
+  const instance = (outer && outer.instance) || node.instance || node.hostname || null;
   return {
     timestamp: node.timestamp,
+    instance,
     cpu: node.cpu || {},
     memory: node.memory || {},
     gpu: Array.isArray(node.gpu) ? node.gpu : [],

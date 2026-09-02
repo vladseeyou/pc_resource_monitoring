@@ -3,8 +3,7 @@
 const POLL_MS = 1500;
 const WINDOW = 48;
 
-const histLabels = [];
-const hostHist = new Map(); // instance -> { cpu, mem, tCpu }
+const hostHist = new Map(); // instance -> { cpu, mem, tCpu, labels }
 
 const el = (id) => document.getElementById(id);
 const dot = el('dot');
@@ -108,7 +107,7 @@ function clockStr(iso) {
 const trim = (a) => { if (a.length > WINDOW) a.splice(0, a.length - WINDOW); };
 
 function getHostHist(instance) {
-  if (!hostHist.has(instance)) hostHist.set(instance, { cpu: [], mem: [], tCpu: [] });
+  if (!hostHist.has(instance)) hostHist.set(instance, { cpu: [], mem: [], tCpu: [], labels: [] });
   return hostHist.get(instance);
 }
 
@@ -265,6 +264,7 @@ function updatePanel(h) {
   hh.mem.push(Number.isFinite(memPct) ? memPct : null); trim(hh.mem);
   const tc = (temps.availability && Number.isFinite(Number(temps.cpuCelsius))) ? Number(temps.cpuCelsius) : null;
   hh.tCpu.push(tc === null ? null : tc); trim(hh.tCpu);
+  hh.labels.push(clockStr(d.timestamp)); trim(hh.labels);
 
   drawPerHost(r, h, hh);
   updateCoreBars(r.coreBars, Array.isArray(d.cpu && d.cpu.perCoreUsagePercent) ? d.cpu.perCoreUsagePercent.map(Number) : []);
@@ -277,7 +277,7 @@ function drawPerHost(r, h, hh) {
       r.chart = new Chart(r.canvas, {
         type: 'line',
         data: {
-          labels: histLabels,
+          labels: hh.labels,
           datasets: [
             Object.assign(lineDataset('CPU', h.color), { data: hh.cpu }),
             Object.assign(lineDataset('RAM', MEM_COLOR), { data: hh.mem })
@@ -290,7 +290,7 @@ function drawPerHost(r, h, hh) {
     } else if (hostChartSig.get(h.instance) === sig) {
       return;
     } else {
-      r.chart.data.labels = histLabels;
+      r.chart.data.labels = hh.labels;
       r.chart.data.datasets[0].data = hh.cpu;
       r.chart.data.datasets[1].data = hh.mem;
       r.chart.update('none');
@@ -388,14 +388,18 @@ function initCharts() {
 function updateComparisonCharts() {
   if (!charts) initCharts();
   const vis = visibleOk();
+  const labels = (vis[0] && getHostHist(vis[0].instance).labels) || [];
   const anyTemp = vis.some((h) => getHostHist(h.instance).tCpu.some((v) => Number.isFinite(v)));
-  el('tempNoData').classList.toggle('show', !anyTemp && histLabels.length >= 4);
+  el('tempNoData').classList.toggle('show', !anyTemp && labels.length >= 4);
 
   const sig = cmpSignature(vis);
   if (sig === cmpSig) return;
   cmpSig = sig;
 
   if (charts.mode === 'chartjs') {
+    charts.cpuChart.data.labels = labels;
+    charts.memChart.data.labels = labels;
+    charts.tempChart.data.labels = labels;
     charts.cpuChart.data.datasets = cmpDatasets('cpu');
     charts.cpuChart.update('none');
     charts.memChart.data.datasets = cmpDatasets('mem');
