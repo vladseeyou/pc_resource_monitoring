@@ -105,16 +105,18 @@ function buildHosts(data) {
   const out = [];
   const local = (data && data.local) || {};
   const lh = local.hostname || 'localhost';
+  const localName = local.instance || lh;
   out.push({
-    role: 'local', instance: lh, displayName: (lh || 'this host') + ' (LOCAL)',
+    role: 'local', instance: lh, displayName: localName + ' (LOCAL)',
     color: '#22d3ee', visible: true, status: 'ok', data: local,
     lastSuccessAt: data && data.timestamp, error: null
   });
   const remotes = Array.isArray(data && data.hosts) ? data.hosts : [];
   for (const h of remotes) {
     const inst = h.instance || h.url || 'unknown';
+    const remoteName = (h.data && h.data.instance) || inst;
     out.push({
-      role: 'remote', instance: inst, displayName: inst, color: hostColor(inst),
+      role: 'remote', instance: inst, displayName: remoteName, color: hostColor(inst),
       visible: h.status === 'ok', status: h.status || 'error',
       data: h.data || null, lastSuccessAt: h.lastSuccessAt || null, error: h.error || null
     });
