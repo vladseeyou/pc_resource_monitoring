@@ -356,9 +356,12 @@ function visibleOk() {
 
 function cmpDatasets(kind) {
   return visibleOk().map((h) => {
-    const series = kind === 'mem' ? getHostHist(h.instance).mem : getHostHist(h.instance).tCpu;
+    const hist = getHostHist(h.instance);
+    let series, label;
+    if (kind === 'cpu') { series = hist.cpu; label = h.displayName; }
+    else if (kind === 'mem') { series = hist.mem; label = h.displayName + ' MEM'; }
+    else { series = hist.tCpu; label = h.displayName + ' \u00b0C'; }
     const color = kind === 'mem' ? MEM_COLOR : h.color;
-    const label = kind === 'mem' ? h.displayName + ' MEM' : (h.displayName + ' \u00b0C');
     return Object.assign(lineDataset(label, color), { data: series });
   });
 }
