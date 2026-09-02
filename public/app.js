@@ -280,7 +280,7 @@ function drawPerHost(r, h, hh) {
         data: {
           labels: hh.labels,
           datasets: [
-            Object.assign(lineDataset('CPU', h.color), { data: hh.cpu }),
+            Object.assign(lineDataset('CPU', CPU_COLOR), { data: hh.cpu }),
             Object.assign(lineDataset('RAM', MEM_COLOR), { data: hh.mem })
           ]
         },
@@ -301,7 +301,7 @@ function drawPerHost(r, h, hh) {
     if (hostChartSig.get(h.instance) === sig) return;
     const finite = hh.cpu.concat(hh.mem).filter((v) => Number.isFinite(v));
     r.noData.classList.toggle('show', finite.length < 2);
-    spark(r.canvas, [hh.cpu, hh.mem], null, 0, 100, [h.color, MEM_COLOR]);
+    spark(r.canvas, [hh.cpu, hh.mem], null, 0, 100, [CPU_COLOR, MEM_COLOR]);
     hostChartSig.set(h.instance, sig);
   }
 }
@@ -412,7 +412,7 @@ function updateComparisonCharts() {
     charts.tempChart.update('none');
   } else {
     const cpuSeries = vis.map((h) => getHostHist(h.instance).cpu);
-    spark(el('cpuChart'), cpuSeries, null, 0, 100, vis.map((h) => h.color));
+    spark(el('cpuChart'), cpuSeries, null, 0, 100, vis.map((h) => CPU_COLOR));
     spark(el('memChart'), vis.map((h) => getHostHist(h.instance).mem), null, 0, 100, vis.map(() => MEM_COLOR));
     const tSeries = vis.map((h) => getHostHist(h.instance).tCpu);
     const all = tSeries.flat().filter((v) => Number.isFinite(v));
