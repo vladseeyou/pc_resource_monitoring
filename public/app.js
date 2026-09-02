@@ -21,8 +21,9 @@ const PALETTE = {
 
 const CORE_COLORS = { ok: '#22d3ee', warn: '#f59e0b', crit: '#ef4444' };
 
-const MEM_COLOR = '#22c55e';
-const GPU_COLOR = '#a855f7';
+const MEM_COLOR = PALETTE.mem[1];
+const GPU_COLOR = PALETTE.gpu[1];
+const CPU_COLOR = PALETTE.cpu[1];
 
 let charts = null; // comparison charts { mode, cpuChart, memChart, tempChart }
 let consecutiveErrors = 0;
@@ -86,7 +87,7 @@ function stateOf(pct) {
 }
 
 function fmt(n, digits = 1) {
-  return Number.isFinite(n) ? n.toFixed(digits) : '--';
+  return Number.isFinite(n) ? n.toFixed(digits)+"%" : '--';
 }
 
 function gb(mb) {
@@ -239,7 +240,7 @@ function updatePanel(h) {
   const gpus = Array.isArray(d.gpu) ? d.gpu : [];
   const temps = d.temperatures || {};
 
-  if (!r.cpuGauge) { r.cpuGauge = appendMini(r.gaugesContainer, 'CPU', h.color); }
+  if (!r.cpuGauge) { r.cpuGauge = appendMini(r.gaugesContainer, 'CPU', CPU_COLOR); }
   if (!r.memGauge) { r.memGauge = appendMini(r.gaugesContainer, 'RAM', MEM_COLOR); }
   setMini(r.cpuGauge, cpuPct);
   r.cpuGauge.subEl.textContent = `${cores} CORES`;
