@@ -33,6 +33,11 @@ let gaugeSeq = 0;
 //               tCpuWrap, tGpuWrap, canvas, noData, coreBars, chart, cpuGauge, memGauge, gpuGauges }
 const hostEls = new Map();
 
+// instances whose panel is currently in view (managed by IntersectionObserver); off-screen
+// hosts skip per-tick rendering so the main thread stays free for scroll responsiveness
+const visibleInstances = new Set();
+let ioActive = false;
+
 let fleet = []; // [{ role, instance, displayName, color, visible, status, data, lastSuccessAt, error }]
 
 // instance -> { chip, nameEl, stateEl, cls, name, state, color } (reconciled fleet chips)
@@ -194,6 +199,25 @@ function createPanel(h) {
   node.style.setProperty('--hc', h.color);
   node.style.display = h.visible ? '' : 'none';
   el('hostPanels').appendChild(node);
+
+  if ('IntersectionObserver' in window) {
+    const panelObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        ioActive = true;
+        if (entry.isIntersecting) {
+          if (!visibleInstances.has(h.instance)) {
+            visibleInstances.add(h.instance);
+            hostChartSig.delete(h.instance);
+            updatePanel(h);
+            updateComparisonCharts();
+          }
+        } else {
+          visibleInstances.delete(h.instance);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '150px' });
+    panelObserver.observe(node);
+  }
 }
 
 function reconcilePanels() {
@@ -259,8 +283,20 @@ function updatePanel(h) {
   const gpuTempOk = !!temps.gpuAvailability && gpus.length > 0;
   setTempChip(r.tGpuWrap, gpuTempOk && Number.isFinite(Number(temps.gpuCelsius)), Number(temps.gpuCelsius));
 
-  // history for this host
   const hh = getHostHist(h.instance);
+  drawPerHost(r, h, hh);
+  updateCoreBars(r.coreBars, Array.isArray(d.cpu && d.cpu.perCoreUsagePercent) ? d.cpu.perCoreUsagePercent.map(Number) : []);
+}
+
+// cheap per-tick history accumulation; always runs (even for off-screen hosts) so charts
+// stay fresh, while the expensive DOM/canvas rendering is gated by visibility in the poll loop
+function recordHistory(h) {
+  const d = h.data;
+  const hh = getHostHist(h.instance);
+  const cpuPct = Number((d.cpu && d.cpu.usagePercent) || 0);
+  const memPct = Number((d.memory && d.memory.percentUsed) || 0);
+  const gpus = Array.isArray(d.gpu) ? d.gpu : [];
+  const temps = d.temperatures || {};
   hh.cpu.push(Number.isFinite(cpuPct) ? cpuPct : null); trim(hh.cpu);
   hh.mem.push(Number.isFinite(memPct) ? memPct : null); trim(hh.mem);
   const tc = (temps.availability && Number.isFinite(Number(temps.cpuCelsius))) ? Number(temps.cpuCelsius) : null;
@@ -268,9 +304,6 @@ function updatePanel(h) {
   const tg = (temps.gpuAvailability && Number.isFinite(Number(temps.gpuCelsius))) ? Number(temps.gpuCelsius) : null;
   hh.tGpu.push(tg === null ? null : tg); trim(hh.tGpu);
   hh.labels.push(clockStr(d.timestamp)); trim(hh.labels);
-
-  drawPerHost(r, h, hh);
-  updateCoreBars(r.coreBars, Array.isArray(d.cpu && d.cpu.perCoreUsagePercent) ? d.cpu.perCoreUsagePercent.map(Number) : []);
 }
 
 function drawPerHost(r, h, hh) {
@@ -538,7 +571,10 @@ async function poll() {
     reconcilePanels();
     renderFleet();
 
-    fleet.forEach((h) => { if (h.visible && h.status === 'ok' && h.data) updatePanel(h); });
+    fleet.forEach((h) => { if (h.visible && h.status === 'ok' && h.data) recordHistory(h); });
+    fleet.forEach((h) => {
+      if (h.visible && h.status === 'ok' && h.data && (ioActive ? visibleInstances.has(h.instance) : true)) updatePanel(h);
+    });
     applyVisibility();
     updateComparisonCharts();
   } catch (err) {

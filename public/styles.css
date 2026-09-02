@@ -204,6 +204,9 @@ h3 {
 
 .chart-wrap { position: relative; height: 210px; }
 
+/* promote canvases to their own compositor layer so scrolling over them stays smooth */
+.chart-wrap canvas, .chart-wrap-sm canvas { will-change: transform; }
+
 .no-data {
   position: absolute;
   inset: 0;
