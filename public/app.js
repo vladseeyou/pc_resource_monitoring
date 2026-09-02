@@ -62,10 +62,21 @@ function hashStr(s) {
   return h;
 }
 
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const chan = (n) => {
+    const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return Math.round(255 * c).toString(16).padStart(2, '0');
+  };
+  return `#${chan(0)}${chan(8)}${chan(4)}`;
+}
+
 function hostColor(instance, isLocal) {
   if (isLocal) return '#22d3ee';
-  const h = hashStr(instance) % 360;
-  return `hsl(${h}, 82%, 64%)`;
+  const hue = hashStr(instance) % 360;
+  return hslToHex(hue, 82, 64);
 }
 
 function stateOf(pct) {
