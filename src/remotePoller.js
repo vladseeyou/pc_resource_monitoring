@@ -85,7 +85,8 @@ function fetchMetricsJson(baseUrl, timeoutMs) {
 /** Polls one host and writes the outcome into the registry, preserving lastSuccessAt on failure. */
 async function pollHost(registry, url, timeoutMs) {
   try {
-    const data = await fetchMetricsJson(url, timeoutMs);
+    const payload = await fetchMetricsJson(url, timeoutMs);
+    const data = (payload && payload.local) || null;
     registry.set(url, {
       status: 'ok',
       lastSuccessAt: new Date().toISOString(),

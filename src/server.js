@@ -296,7 +296,7 @@ const server = http.createServer(async (req, res) => {
       } else {
         aggregate = {
           timestamp: new Date().toISOString(),
-          local: metrics,
+          local: Object.assign({}, metrics, { instance: LOCAL_INSTANCE }),
           hosts: remoteRegistry.list().map(({ instance, url, status, lastSuccessAt, error, data }) => ({
             instance,
             url,
