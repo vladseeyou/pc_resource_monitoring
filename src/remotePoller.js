@@ -82,11 +82,36 @@ function fetchMetricsJson(baseUrl, timeoutMs) {
   });
 }
 
+/**
+ * Extracts the flat metrics block from a remote /api/metrics payload. Deployments
+ * shape this differently: current versions put the flat block at payload.local, while
+ * older/aggregate responses nest it one level deeper under payload.local.local. This
+ * descends `local` until reaching a block that carries real memory/cpu data, then
+ * normalizes to { cpu, memory, gpu, temperatures, ... } so both the frontend and the
+ * Prometheus renderer see a consistent shape regardless of the remote's version.
+ */
+function extractRemoteMetrics(payload) {
+  let node = payload && typeof payload === 'object' ? payload.local : null;
+  while (node && typeof node === 'object' && node.local && !node.memory) {
+    node = node.local;
+  }
+  if (!node || typeof node !== 'object') return null;
+  return {
+    timestamp: node.timestamp,
+    cpu: node.cpu || {},
+    memory: node.memory || {},
+    gpu: Array.isArray(node.gpu) ? node.gpu : [],
+    temperatures: node.temperatures || {},
+    platform: node.platform,
+    hostname: node.hostname,
+  };
+}
+
 /** Polls one host and writes the outcome into the registry, preserving lastSuccessAt on failure. */
 async function pollHost(registry, url, timeoutMs) {
   try {
     const payload = await fetchMetricsJson(url, timeoutMs);
-    const data = (payload && payload.local) || null;
+    const data = extractRemoteMetrics(payload);
     registry.set(url, {
       status: 'ok',
       lastSuccessAt: new Date().toISOString(),
@@ -139,4 +164,4 @@ function startRemotePoller(registry) {
   };
 }
 
-module.exports = { startRemotePoller, normalizeHost, normalizeHosts, fetchMetricsJson, pollHost };
+module.exports = { startRemotePoller, normalizeHost, normalizeHosts, fetchMetricsJson, pollHost, extractRemoteMetrics };
